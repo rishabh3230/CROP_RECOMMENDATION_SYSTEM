@@ -1,0 +1,426 @@
+import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../widgets/shared_widgets.dart';
+import '../services/agro_service.dart';
+import '../models/models.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  WeatherData? _weather;
+  List<WeatherAlert> _activeAlerts = [];
+  bool _loading = true;
+  late AnimationController _headerCtrl;
+  late Animation<Offset> _headerSlide;
+
+  @override
+  void initState() {
+    super.initState();
+    _headerCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 700));
+    _headerSlide = Tween<Offset>(
+      begin: const Offset(0, -0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic));
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final weather = await AgroService.fetchCurrentWeather(30.7, 76.7);
+    final alerts = await AgroService.fetchSmartAlerts(30.7, 76.7);
+    if (mounted) {
+      setState(() {
+        _weather = weather;
+        _activeAlerts = alerts.where((a) => a.isActive).toList();
+        _loading = false;
+      });
+      _headerCtrl.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _headerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientBackground(
+      child: SafeArea(
+        child: _loading
+            ? const LoadingOverlay(message: 'Loading your farm data...')
+            : _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          _buildWeatherCard(),
+          if (_activeAlerts.isNotEmpty) _buildAlertBanner(),
+          _buildQuickActions(),
+          _buildSeasonInfo(),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return SlideTransition(
+      position: _headerSlide,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'AgroMind',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Good Morning,\nFarmer',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                      height: 1.15,
+                      letterSpacing: -0.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: AppTheme.accent.withOpacity(0.4), width: 2),
+              ),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: AppTheme.card,
+                child: const Text('👨‍🌾', style: TextStyle(fontSize: 22)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeatherCard() {
+    final w = _weather!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.accentCool.withOpacity(0.18),
+              AppTheme.accent.withOpacity(0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: AppTheme.accentCool.withOpacity(0.25), width: 1),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(w.icon, style: const TextStyle(fontSize: 44)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${w.temperature.toStringAsFixed(1)}°C',
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      Text(
+                        w.condition,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded,
+                              size: 12, color: AppTheme.accentCool),
+                          const SizedBox(width: 3),
+                          Text(
+                            w.location,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _weatherDetail(
+                    '💧', '${w.humidity.toInt()}%', 'Humidity'),
+                _weatherDetail(
+                    '🌧️', '${w.rainfall}mm', 'Rainfall'),
+                _weatherDetail(
+                    '💨', '${w.windSpeed}km/h', 'Wind'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _weatherDetail(String icon, String value, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 10, color: AppTheme.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.accentRed.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: AppTheme.accentRed.withOpacity(0.35), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: AppTheme.accentRed),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${_activeAlerts.length} active alert${_activeAlerts.length > 1 ? 's' : ''}: ${_activeAlerts.first.title}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.accentRed,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.accentRed, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    final actions = [
+      {
+        'icon': '🌱',
+        'label': 'Predict\nCrops',
+        'color': AppTheme.accent,
+        'tab': 1
+      },
+      {
+        'icon': '💰',
+        'label': 'Profit\nAnalysis',
+        'color': AppTheme.accentWarm,
+        'tab': 2
+      },
+      {
+        'icon': '⭐',
+        'label': 'Best\nCrop',
+        'color': AppTheme.accentPurple,
+        'tab': 3
+      },
+      {
+        'icon': '🔔',
+        'label': 'Smart\nAlerts',
+        'color': AppTheme.accentCool,
+        'tab': 4
+      },
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Quick Access',
+            subtitle: 'AI-powered tools for your farm',
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: actions.map((a) {
+              final color = a['color'] as Color;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.card,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: color.withOpacity(0.2), width: 1),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(a['icon'] as String,
+                            style: const TextStyle(fontSize: 26)),
+                        const SizedBox(height: 8),
+                        Text(
+                          a['label'] as String,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeasonInfo() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Growing Season Status',
+            subtitle: 'Current agricultural calendar',
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: AppTheme.accent.withOpacity(0.15), width: 1),
+            ),
+            child: Column(
+              children: [
+                _seasonRow('🌱', 'Wheat Planting', 'Oct 15 – Nov 30',
+                    0.65, AppTheme.accent),
+                const SizedBox(height: 14),
+                _seasonRow('💧', 'Irrigation Cycle', 'Every 12–15 days',
+                    0.4, AppTheme.accentCool),
+                const SizedBox(height: 14),
+                _seasonRow('🌾', 'Harvest Window', 'Mar 20 – Apr 10',
+                    0.15, AppTheme.accentWarm),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _seasonRow(
+      String icon, String label, String detail, double progress, Color color) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary)),
+            ),
+            Text(detail,
+                style: const TextStyle(
+                    fontSize: 11, color: AppTheme.textMuted)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ConfidenceBar(value: progress, color: color, height: 5),
+      ],
+    );
+  }
+}

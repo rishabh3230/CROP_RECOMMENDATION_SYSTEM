@@ -113,11 +113,11 @@ class _AlertsScreenState extends State<AlertsScreen>
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       child: Row(
         children: [
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Smart Alerts',
                   style: TextStyle(
                     fontSize: 22,
@@ -128,8 +128,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                 ),
                 Text(
                   'Real-time weather intelligence for your farm',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppTheme.textMuted),
+                  style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
                 ),
               ],
             ),
@@ -138,8 +137,8 @@ class _AlertsScreenState extends State<AlertsScreen>
             AnimatedBuilder(
               animation: _pulseCtrl,
               builder: (_, child) => Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
                   color: AppTheme.accentRed
                       .withValues(alpha: 0.1 + 0.1 * _pulseCtrl.value),
@@ -157,8 +156,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                       width: 7,
                       height: 7,
                       decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppTheme.accentRed),
+                          shape: BoxShape.circle, color: AppTheme.accentRed),
                     ),
                     const SizedBox(width: 7),
                     Text(
@@ -216,8 +214,7 @@ class _AlertsScreenState extends State<AlertsScreen>
           ),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: color
-                .withValues(alpha: 0.4 + 0.15 * _pulseCtrl.value),
+            color: color.withValues(alpha: 0.4 + 0.15 * _pulseCtrl.value),
             width: 1.5,
           ),
         ),
@@ -274,8 +271,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      Icon(Icons.access_time_rounded,
-                          size: 12, color: color),
+                      Icon(Icons.access_time_rounded, size: 12, color: color),
                       const SizedBox(width: 4),
                       Text(
                         alert.time,
@@ -309,8 +305,8 @@ class _AlertsScreenState extends State<AlertsScreen>
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _actionButton(
-                  'Set Reminder', Icons.alarm_add_rounded, color),
+              child:
+                  _actionButton('Set Reminder', Icons.alarm_add_rounded, color),
             ),
           ],
         ),
@@ -334,9 +330,7 @@ class _AlertsScreenState extends State<AlertsScreen>
           Text(
             label,
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color),
+                fontSize: 12, fontWeight: FontWeight.w600, color: color),
           ),
         ],
       ),
@@ -366,13 +360,12 @@ class _AlertsScreenState extends State<AlertsScreen>
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 12, horizontal: 4),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.card,
                     borderRadius: BorderRadius.circular(14),
-                    border:
-                        Border.all(color: AppTheme.border, width: 1),
+                    border: Border.all(color: AppTheme.border, width: 1),
                   ),
                   child: Column(
                     children: [
@@ -385,8 +378,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(f['icon']!,
-                          style: const TextStyle(fontSize: 20)),
+                      Text(f['icon']!, style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 6),
                       Text(
                         f['high']!,
@@ -471,8 +463,7 @@ class _AlertsScreenState extends State<AlertsScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text(alert.icon,
-                  style: const TextStyle(fontSize: 22)),
+              child: Text(alert.icon, style: const TextStyle(fontSize: 22)),
             ),
           ),
           const SizedBox(width: 14),
@@ -491,15 +482,14 @@ class _AlertsScreenState extends State<AlertsScreen>
                 const SizedBox(height: 2),
                 Text(
                   alert.time,
-                  style: const TextStyle(
-                      fontSize: 11, color: AppTheme.textMuted),
+                  style:
+                      const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                 ),
               ],
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
@@ -557,8 +547,7 @@ class _AlertsScreenState extends State<AlertsScreen>
               final i = e.key;
               final tip = e.value;
               return Padding(
-                padding: EdgeInsets.only(
-                    bottom: i < tips.length - 1 ? 14 : 0),
+                padding: EdgeInsets.only(bottom: i < tips.length - 1 ? 14 : 0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

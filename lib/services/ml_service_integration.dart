@@ -5,7 +5,7 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
+import '../models/models.dart';
 
 /// ─── Python ML Backend Setup ─────────────────────────────────────────
 ///
@@ -35,18 +35,18 @@ const String _openMeteoHistoricalUrl = 'https://archive-api.open-meteo.com/v1/ar
 class ProductionAgroService {
 
   /// ─── Current Weather ─────────────────────────────────────────────
-  static Future<Map<String, dynamic>> fetchCurrentWeather(
+  static Future<WeatherData> fetchCurrentWeather(
       double lat, double lon) async {
     final uri = Uri.parse(
       'https://api.openweathermap.org/data/2.5/weather'
       '?lat=$lat&lon=$lon&appid=$_owmKey&units=metric',
     );
     final res = await http.get(uri);
-    return jsonDecode(res.body);
+    return WeatherData.fromJson(jsonDecode(res.body));
   }
 
   /// ─── Weather Alerts (One Call API 3.0) ───────────────────────────
-  static Future<Map<String, dynamic>> fetchWeatherAlerts(
+  static Future<List<WeatherAlert>> fetchWeatherAlerts(
       double lat, double lon) async {
     final uri = Uri.parse(
       'https://api.openweathermap.org/data/3.0/onecall'
@@ -54,15 +54,15 @@ class ProductionAgroService {
     );
     final res = await http.get(uri);
     final data = jsonDecode(res.body);
-    // data['alerts'] contains the storm/rain/snow alert list
-    return data;
+    final List alerts = data['alerts'] ?? [];
+    return alerts.map((a) => WeatherAlert.fromJson(a)).toList();
   }
 
   /// ─── 10-Year Historical Weather (Open-Meteo — FREE) ─────────────
   ///
   /// Open-Meteo Archive provides daily data from 1940 to present.
   /// No API key required!
-  static Future<List<Map<String, dynamic>>> fetchTenYearHistory(
+  static Future<List<HistoricalWeather>> fetchTenYearHistory(
       double lat, double lon) async {
     final endYear = DateTime.now().year - 1;
     final startYear = endYear - 10;
@@ -78,9 +78,8 @@ class ProductionAgroService {
     final res = await http.get(uri);
     final data = jsonDecode(res.body);
 
-    // Aggregate daily → yearly summary
-    // data['daily']['time'], data['daily']['precipitation_sum'], etc.
-    return _aggregateToYearly(data['daily']);
+    final aggregated = _aggregateToYearly(data['daily']);
+    return aggregated.map((m) => HistoricalWeather.fromJson(m)).toList();
   }
 
   static List<Map<String, dynamic>> _aggregateToYearly(
@@ -121,7 +120,7 @@ class ProductionAgroService {
   /// 2. Query SoilGrids for soil properties at location
   /// 3. Feed into trained XGBoost model
   /// 4. Return ranked crop predictions with confidence scores
-  static Future<List<Map<String, dynamic>>> predictCrops(
+  static Future<List<CropPrediction>> predictCrops(
       double lat,
       double lon,
       String soilType,
@@ -137,7 +136,8 @@ class ProductionAgroService {
       }),
     );
     final data = jsonDecode(res.body);
-    return List<Map<String, dynamic>>.from(data['predictions']);
+    final List predictions = data['predictions'] ?? [];
+    return predictions.map((p) => CropPrediction.fromJson(p)).toList();
   }
 
   /// ─── Best Crop (ML over 10yr data) ───────────────────────────────
@@ -147,7 +147,7 @@ class ProductionAgroService {
   /// 2. Compute climate fingerprint (temperature seasonality, GDD, etc.)
   /// 3. Score each crop using trained multi-output classifier
   /// 4. Return ranked list with dimension scores
-  static Future<List<Map<String, dynamic>>> getBestCrops(
+  static Future<List<BestCropRecommendation>> getBestCrops(
       double lat, double lon) async {
     final res = await http.post(
       Uri.parse('$_mlBaseUrl/best-crop'),
@@ -155,7 +155,8 @@ class ProductionAgroService {
       body: jsonEncode({'latitude': lat, 'longitude': lon}),
     );
     final data = jsonDecode(res.body);
-    return List<Map<String, dynamic>>.from(data['recommendations']);
+    final List recommendations = data['recommendations'] ?? [];
+    return recommendations.map((r) => BestCropRecommendation.fromJson(r)).toList();
   }
 
   /// ─── Soil Type from GPS (SoilGrids API — FREE) ───────────────────

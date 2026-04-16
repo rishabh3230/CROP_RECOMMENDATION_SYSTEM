@@ -29,8 +29,8 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
     _searchCtrl = TextEditingController();
     _detailCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
-    _detailAnim = CurvedAnimation(
-        parent: _detailCtrl, curve: Curves.easeOutCubic);
+    _detailAnim =
+        CurvedAnimation(parent: _detailCtrl, curve: Curves.easeOutCubic);
     _loadData();
   }
 
@@ -53,9 +53,8 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
 
   List<CropProfit> get _filteredCrops {
     return _allCrops.where((c) {
-      final matchSearch = c.cropName
-          .toLowerCase()
-          .contains(_searchQuery.toLowerCase());
+      final matchSearch =
+          c.cropName.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchCat =
           _selectedCategory == 'All' || c.category == _selectedCategory;
       return matchSearch && matchCat;
@@ -161,8 +160,8 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
     final totalCrops = _allCrops.length;
     final highest = _allCrops.isEmpty
         ? null
-        : _allCrops.reduce((a, b) =>
-            a.profitPerHectare > b.profitPerHectare ? a : b);
+        : _allCrops
+            .reduce((a, b) => a.profitPerHectare > b.profitPerHectare ? a : b);
     return Row(
       children: [
         Expanded(
@@ -196,16 +195,14 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
       child: TextField(
         controller: _searchCtrl,
         onChanged: (v) => setState(() => _searchQuery = v),
-        style: const TextStyle(
-            color: AppTheme.textPrimary, fontSize: 14),
+        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: const InputDecoration(
           hintText: 'Search crops...',
           hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 14),
-          prefixIcon: Icon(Icons.search_rounded,
-              color: AppTheme.textMuted, size: 20),
+          prefixIcon:
+              Icon(Icons.search_rounded, color: AppTheme.textMuted, size: 20),
           border: InputBorder.none,
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );
@@ -223,17 +220,15 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
               onTap: () => setState(() => _selectedCategory = cat),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: selected
                       ? AppTheme.accentWarm.withValues(alpha: 0.15)
                       : AppTheme.card,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected
-                        ? AppTheme.accentWarm
-                        : AppTheme.border,
+                    color: selected ? AppTheme.accentWarm : AppTheme.border,
                     width: selected ? 1.5 : 1,
                   ),
                 ),
@@ -241,11 +236,9 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   cat,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected
-                        ? AppTheme.accentWarm
-                        : AppTheme.textSecondary,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color:
+                        selected ? AppTheme.accentWarm : AppTheme.textSecondary,
                   ),
                 ),
               ),
@@ -263,8 +256,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
         child: Padding(
           padding: EdgeInsets.all(40),
           child: Text('No crops found',
-              style:
-                  TextStyle(color: AppTheme.textMuted, fontSize: 14)),
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 14)),
         ),
       );
     }
@@ -301,8 +293,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                 ),
                 child: Row(
                   children: [
-                    Text(crop.emoji,
-                        style: const TextStyle(fontSize: 28)),
+                    Text(crop.emoji, style: const TextStyle(fontSize: 28)),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -319,8 +310,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                           Text(
                             crop.category,
                             style: const TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textMuted),
+                                fontSize: 12, color: AppTheme.textMuted),
                           ),
                         ],
                       ),
@@ -367,9 +357,8 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                       isSelected
                           ? Icons.check_circle_rounded
                           : Icons.chevron_right_rounded,
-                      color: isSelected
-                          ? AppTheme.accentWarm
-                          : AppTheme.textMuted,
+                      color:
+                          isSelected ? AppTheme.accentWarm : AppTheme.textMuted,
                       size: 18,
                     ),
                   ],
@@ -411,8 +400,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
             children: [
               Row(
                 children: [
-                  Text(crop.emoji,
-                      style: const TextStyle(fontSize: 36)),
+                  Text(crop.emoji, style: const TextStyle(fontSize: 36)),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -426,9 +414,9 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                             color: AppTheme.textPrimary,
                           ),
                         ),
-                        Text(
+                        const Text(
                           'Detailed Profit Analysis',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 12, color: AppTheme.textMuted),
                         ),
                       ],
@@ -471,7 +459,9 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                 height: 80,
                 child: MiniBarChart(
                   values: crop.monthlyData.map((m) => m.profit).toList(),
-                  labels: crop.monthlyData.map((m) => m.month.substring(0, 3)).toList(),
+                  labels: crop.monthlyData
+                      .map((m) => m.month.substring(0, 3))
+                      .toList(),
                   color: AppTheme.accentWarm,
                 ),
               ),
@@ -505,8 +495,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
           Text(
             label,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 10, color: AppTheme.textMuted),
+            style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
           ),
         ],
       ),
@@ -523,8 +512,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
         Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: AppTheme.accentPurple.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -559,13 +547,11 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   color: AppTheme.card,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: AppTheme.accentPurple.withValues(alpha: 0.2),
-                      width: 1),
+                      color: AppTheme.accentPurple.withValues(alpha: 0.2), width: 1),
                 ),
                 child: Row(
                   children: [
-                    Text(crop.emoji,
-                        style: const TextStyle(fontSize: 24)),
+                    Text(crop.emoji, style: const TextStyle(fontSize: 24)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

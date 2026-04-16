@@ -8,10 +8,10 @@ class AppTheme {
   static const Color cardAlt = Color(0xFF1A2A1E);
   static const Color navBg = Color(0xFF0F1C16);
 
-  static const Color accent = Color(0xFF6FCF45);      // lime green
-  static const Color accentWarm = Color(0xFFE8A94C);  // amber
-  static const Color accentCool = Color(0xFF4CBFE8);  // sky blue
-  static const Color accentRed = Color(0xFFE85C4A);   // alert red
+  static const Color accent = Color(0xFF6FCF45); // lime green
+  static const Color accentWarm = Color(0xFFE8A94C); // amber
+  static const Color accentCool = Color(0xFF4CBFE8); // sky blue
+  static const Color accentRed = Color(0xFFE85C4A); // alert red
   static const Color accentPurple = Color(0xFF9B6FE8); // prediction purple
 
   static const Color textPrimary = Color(0xFFF0F4EE);
@@ -29,7 +29,6 @@ class AppTheme {
         primary: accent,
         secondary: accentWarm,
         surface: surface,
-        background: bg,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,

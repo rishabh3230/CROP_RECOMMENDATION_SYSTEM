@@ -135,13 +135,12 @@ class SectionHeader extends StatelessWidget {
                   letterSpacing: -0.3,
                 ),
               ),
-              if (subtitle != null) {
+              if (subtitle != null)
                 Text(
                   subtitle!,
-                  style: const TextStyle(
-                      fontSize: 12, color: AppTheme.textMuted),
-                );
-              }
+                  style:
+                      const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                ),
             ],
           ),
         ),
@@ -349,7 +348,8 @@ class _RadarPainter extends CustomPainter {
       final path = Path();
       for (int i = 0; i <= n; i++) {
         final a = -math.pi / 2 + i * angle;
-        final pt = Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
+        final pt =
+            Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
         if (i == 0) {
           path.moveTo(pt.dx, pt.dy);
         } else {
@@ -363,8 +363,10 @@ class _RadarPainter extends CustomPainter {
     // Axis lines
     for (int i = 0; i < n; i++) {
       final a = -math.pi / 2 + i * angle;
-      canvas.drawLine(center,
-          Offset(center.dx + radius * math.cos(a), center.dy + radius * math.sin(a)),
+      canvas.drawLine(
+          center,
+          Offset(center.dx + radius * math.cos(a),
+              center.dy + radius * math.sin(a)),
           gridPaint);
     }
 
@@ -381,7 +383,8 @@ class _RadarPainter extends CustomPainter {
     for (int i = 0; i <= n; i++) {
       final a = -math.pi / 2 + (i % n) * angle;
       final r = radius * values[i % n];
-      final pt = Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
+      final pt =
+          Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
       if (i == 0) {
         path.moveTo(pt.dx, pt.dy);
       } else {
@@ -393,22 +396,28 @@ class _RadarPainter extends CustomPainter {
     canvas.drawPath(path, strokePaint);
 
     // Dots + labels
-    final dotPaint = Paint()..color = color..style = PaintingStyle.fill;
+    final dotPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
     final tp = TextPainter(textDirection: TextDirection.ltr);
 
     for (int i = 0; i < n; i++) {
       final a = -math.pi / 2 + i * angle;
       final r = radius * values[i];
-      final pt = Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
+      final pt =
+          Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
       canvas.drawCircle(pt, 4, dotPaint);
 
       // Label
       final lr = radius + 16;
-      final lpt = Offset(center.dx + lr * math.cos(a), center.dy + lr * math.sin(a));
+      final lpt =
+          Offset(center.dx + lr * math.cos(a), center.dy + lr * math.sin(a));
       tp.text = TextSpan(
         text: labels[i],
         style: const TextStyle(
-            color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w600),
+            color: AppTheme.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w600),
       );
       tp.layout();
       tp.paint(canvas, Offset(lpt.dx - tp.width / 2, lpt.dy - tp.height / 2));
@@ -452,8 +461,8 @@ class MiniBarChart extends StatelessWidget {
                   height: 60 * normalized,
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.2 + 0.6 * normalized),
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(3)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(3)),
                   ),
                 ),
                 const SizedBox(height: 4),

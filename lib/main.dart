@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:agro_intelligence/screens/home_screen.dart';
-import 'package:agro_intelligence/screens/crop_prediction_screen.dart';
+import 'package:agro_intelligence/screens/crop_intelligence_screen.dart';
 import 'package:agro_intelligence/screens/profit_analysis_screen.dart';
-import 'package:agro_intelligence/screens/best_crop_screen.dart';
 import 'package:agro_intelligence/screens/alerts_screen.dart';
 import 'package:agro_intelligence/theme/app_theme.dart';
 
@@ -45,14 +44,6 @@ class _MainNavigatorState extends State<MainNavigator>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const CropPredictionScreen(),
-    const ProfitAnalysisScreen(),
-    const BestCropScreen(),
-    const AlertsScreen(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -67,7 +58,12 @@ class _MainNavigatorState extends State<MainNavigator>
     _fadeController.forward();
   }
 
-  void _onTabTapped(int index) {
+  int _intelligenceSubTab = 0;
+
+  void _onTabTapped(int index, {int? subTab}) {
+    if (subTab != null) {
+      setState(() => _intelligenceSubTab = subTab);
+    }
     if (_currentIndex != index) {
       _fadeController.reset();
       setState(() => _currentIndex = index);
@@ -83,10 +79,20 @@ class _MainNavigatorState extends State<MainNavigator>
 
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      HomeScreen(onNavigate: _onTabTapped),
+      CropIntelligenceScreen(
+        key: ValueKey('intel_$_intelligenceSubTab'),
+        initialTab: _intelligenceSubTab,
+      ),
+      const ProfitAnalysisScreen(),
+      const AlertsScreen(),
+    ];
+
     return Scaffold(
       body: FadeTransition(
         opacity: _fadeAnimation,
-        child: _screens[_currentIndex],
+        child: screens[_currentIndex],
       ),
       bottomNavigationBar: _buildNavBar(),
     );
@@ -95,9 +101,8 @@ class _MainNavigatorState extends State<MainNavigator>
   Widget _buildNavBar() {
     final items = [
       {'icon': Icons.dashboard_rounded, 'label': 'Home'},
-      {'icon': Icons.grain_rounded, 'label': 'Predict'},
+      {'icon': Icons.psychology_rounded, 'label': 'Intelligence'},
       {'icon': Icons.trending_up_rounded, 'label': 'Profit'},
-      {'icon': Icons.auto_awesome_rounded, 'label': 'Best Crop'},
       {'icon': Icons.notifications_active_rounded, 'label': 'Alerts'},
     ];
 
@@ -110,7 +115,7 @@ class _MainNavigatorState extends State<MainNavigator>
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
@@ -120,7 +125,8 @@ class _MainNavigatorState extends State<MainNavigator>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppTheme.accent.withValues(alpha: 0.15)
@@ -140,9 +146,7 @@ class _MainNavigatorState extends State<MainNavigator>
                         items[i]['label'] as String,
                         style: TextStyle(
                           fontSize: 10,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.w400,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
                           color: isSelected ? AppTheme.accent : AppTheme.textMuted,
                           letterSpacing: 0.3,
                         ),

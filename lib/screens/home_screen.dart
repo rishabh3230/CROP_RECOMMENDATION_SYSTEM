@@ -6,7 +6,8 @@ import '../services/crop_prediction_service.dart';
 import '../models/models.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Function(int, {int? subTab})? onNavigate;
+  const HomeScreen({super.key, this.onNavigate});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -87,7 +88,6 @@ class _HomeScreenState extends State<HomeScreen>
           if (_recommendedCrop != null) _buildWeatherBasedRecommendation(),
           if (_activeAlerts.isNotEmpty) _buildAlertBanner(),
           _buildQuickActions(),
-          _buildSeasonInfo(),
           const SizedBox(height: 24),
         ],
       ),
@@ -148,10 +148,10 @@ class _HomeScreenState extends State<HomeScreen>
                 border: Border.all(
                     color: AppTheme.accent.withValues(alpha: 0.4), width: 2),
               ),
-              child: CircleAvatar(
+              child: const CircleAvatar(
                 radius: 22,
                 backgroundColor: AppTheme.card,
-                child: const Text('👨‍🌾', style: TextStyle(fontSize: 22)),
+                child: Text('👨‍🌾', style: TextStyle(fontSize: 22)),
               ),
             ),
           ],
@@ -226,12 +226,9 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 16),
             Row(
               children: [
-                _weatherDetail(
-                    '💧', '${w.humidity.toInt()}%', 'Humidity'),
-                _weatherDetail(
-                    '🌧️', '${w.rainfall}mm', 'Rainfall'),
-                _weatherDetail(
-                    '💨', '${w.windSpeed}km/h', 'Wind'),
+                _weatherDetail('💧', '${w.humidity.toInt()}%', 'Humidity'),
+                _weatherDetail('🌧️', '${w.rainfall}mm', 'Rainfall'),
+                _weatherDetail('💨', '${w.windSpeed}km/h', 'Wind'),
               ],
             ),
           ],
@@ -252,8 +249,7 @@ class _HomeScreenState extends State<HomeScreen>
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textPrimary)),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 10, color: AppTheme.textMuted)),
+              style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
         ],
       ),
     );
@@ -337,38 +333,41 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildAlertBanner() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.accentRed.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: AppTheme.accentRed.withValues(alpha: 0.35), width: 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                  shape: BoxShape.circle, color: AppTheme.accentRed),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '${_activeAlerts.length} active alert${_activeAlerts.length > 1 ? 's' : ''}: ${_activeAlerts.first.title}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.accentRed,
-                  fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onTap: () => widget.onNavigate?.call(3),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.accentRed.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: AppTheme.accentRed.withValues(alpha: 0.35), width: 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                    shape: BoxShape.circle, color: AppTheme.accentRed),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${_activeAlerts.length} active alert${_activeAlerts.length > 1 ? 's' : ''}: ${_activeAlerts.first.title}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.accentRed,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppTheme.accentRed, size: 18),
-          ],
+              const Icon(Icons.chevron_right_rounded,
+                  color: AppTheme.accentRed, size: 18),
+            ],
+          ),
         ),
       ),
     );
@@ -380,25 +379,27 @@ class _HomeScreenState extends State<HomeScreen>
         'icon': '🌱',
         'label': 'Predict\nCrops',
         'color': AppTheme.accent,
-        'tab': 1
+        'tab': 1,
+        'subTab': 0
       },
       {
         'icon': '💰',
         'label': 'Profit\nAnalysis',
         'color': AppTheme.accentWarm,
-        'tab': 2
+        'tab': 2,
       },
       {
         'icon': '⭐',
         'label': 'Best\nCrop',
         'color': AppTheme.accentPurple,
-        'tab': 3
+        'tab': 1,
+        'subTab': 1
       },
       {
         'icon': '🔔',
         'label': 'Smart\nAlerts',
         'color': AppTheme.accentCool,
-        'tab': 4
+        'tab': 3,
       },
     ];
 
@@ -418,31 +419,40 @@ class _HomeScreenState extends State<HomeScreen>
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: color.withValues(alpha: 0.2), width: 1),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(a['icon'] as String,
-                            style: const TextStyle(fontSize: 26)),
-                        const SizedBox(height: 8),
-                        Text(
-                          a['label'] as String,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                            height: 1.3,
+                  child: GestureDetector(
+                    onTap: () => widget.onNavigate?.call(a['tab'] as int,
+                        subTab: a['subTab'] as int?),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: color.withValues(alpha: 0.2), width: 1),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(a['icon'] as String,
+                              style: const TextStyle(fontSize: 26)),
+                          const SizedBox(height: 8),
+                          Text(
+                            a['label'] as String,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: color,
+                              height: 1.3,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -453,7 +463,6 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
   Widget _buildSeasonInfo() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -475,14 +484,14 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             child: Column(
               children: [
-                _seasonRow('🌱', 'Wheat Planting', 'Oct 15 – Nov 30',
-                    0.65, AppTheme.accent),
+                _seasonRow('🌱', 'Wheat Planting', 'Oct 15 – Nov 30', 0.65,
+                    AppTheme.accent),
                 const SizedBox(height: 14),
-                _seasonRow('💧', 'Irrigation Cycle', 'Every 12–15 days',
-                    0.4, AppTheme.accentCool),
+                _seasonRow('💧', 'Irrigation Cycle', 'Every 12–15 days', 0.4,
+                    AppTheme.accentCool),
                 const SizedBox(height: 14),
-                _seasonRow('🌾', 'Harvest Window', 'Mar 20 – Apr 10',
-                    0.15, AppTheme.accentWarm),
+                _seasonRow('🌾', 'Harvest Window', 'Mar 20 – Apr 10', 0.15,
+                    AppTheme.accentWarm),
               ],
             ),
           ),
@@ -507,8 +516,7 @@ class _HomeScreenState extends State<HomeScreen>
                       color: AppTheme.textPrimary)),
             ),
             Text(detail,
-                style: const TextStyle(
-                    fontSize: 11, color: AppTheme.textMuted)),
+                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
           ],
         ),
         const SizedBox(height: 6),

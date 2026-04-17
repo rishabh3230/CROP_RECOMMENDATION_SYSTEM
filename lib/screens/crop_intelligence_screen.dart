@@ -150,12 +150,13 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
 
     try {
       // Fetch ML-specific analysis if backend is available
+      debugPrint('Syncing Deep Analysis with backend: ${CropPredictionService.baseUrl}');
       final analysis = await CropPredictionService.fetchWeatherAnalysis(lat, lon);
       
-      // Sync real-time data into the analysis map
+      // Sync real-time data into the analysis map ONLY if keys are missing/null
       if (realWeather != null) {
-        analysis['avg_temp'] = realWeather.temperature;
-        analysis['avg_humidity'] = realWeather.humidity;
+        analysis['avg_temp'] ??= analysis['avgTemp'] ?? realWeather.temperature;
+        analysis['avg_humidity'] ??= analysis['avgHumidity'] ?? realWeather.humidity.toDouble();
       }
       
       if (mounted) {
@@ -167,20 +168,30 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
           _isDataLoaded = true;
           _recsLoading = false;
         });
+        debugPrint('Deep Analysis synced successfully with backend');
         _recsCardCtrl.forward();
         _recsRadarCtrl.forward();
       }
     } catch (e) {
+      debugPrint('Deep Analysis backend fetch failed, using OWM fallback: $e');
+      
       // Fallback: If custom analysis backend fails, use real-time OWM data to build a basic analysis
       if (realWeather != null) {
+        final history = List.generate(15, (i) => {
+          'date': 'Day ${i + 1}',
+          'rainfall': (realWeather!.description.toLowerCase().contains('rain') ? 5.0 : 0.0) + (i % 3 == 0 ? 2.0 : 0.0),
+        });
+        
+        double calculatedTotalRain = 0;
+        for (var h in history) {
+          calculatedTotalRain += (h['rainfall'] as num).toDouble();
+        }
+
         final fallbackAnalysis = {
           'avg_temp': realWeather.temperature,
           'avg_humidity': realWeather.humidity.toDouble(),
-          'total_rainfall': 0.0, // OWM 2.5 doesn't easily provide season total
-          'history': List.generate(15, (i) => {
-            'date': 'Day ${i + 1}',
-            'rainfall': (realWeather!.description.toLowerCase().contains('rain') ? 5.0 : 0.0) + (i % 3 == 0 ? 2.0 : 0.0),
-          }),
+          'total_rainfall': calculatedTotalRain, 
+          'history': history,
         };
         
         if (mounted) {
@@ -192,14 +203,24 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
             _isDataLoaded = true;
             _recsLoading = false;
           });
+          debugPrint('Deep Analysis resolved via fallback successfully');
           _recsCardCtrl.forward();
           _recsRadarCtrl.forward();
         }
       } else {
+        // Absolute fallback if everything fails
         if (mounted) {
-          setState(() => _recsLoading = false);
+          setState(() {
+            _isDataLoaded = true; // Still set to true to avoid infinite loading
+            _recsLoading = false;
+            _weatherAnalysis = {
+              'avg_temp': 25.0,
+              'total_rainfall': 0.0,
+              'history': [],
+            };
+          });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Sync Error: $e')),
+            const SnackBar(content: Text('Sync Error: Unable to fetch weather data for analysis.')),
           );
         }
       }
@@ -574,9 +595,14 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
   }
 
   Widget _buildAnalysisInfo() {
-    final avgTemp = _weatherAnalysis?['avg_temp'] ?? 0.0;
-    final totalRain = _weatherAnalysis?['total_rainfall'] ?? 0.0;
-    final avgHum = _weatherAnalysis?['avg_humidity'] ?? 0.0;
+    // Robust lookup for keys that might vary between naming conventions
+    final avgTempNum = _weatherAnalysis?['avg_temp'] ?? _weatherAnalysis?['avgTemp'] ?? 0.0;
+    final totalRainNum = _weatherAnalysis?['total_rainfall'] ?? _weatherAnalysis?['totalRainfall'] ?? 0.0;
+    final avgHumNum = _weatherAnalysis?['avg_humidity'] ?? _weatherAnalysis?['avgHumidity'] ?? 0.0;
+
+    final avgTemp = (avgTempNum as num).toDouble();
+    final totalRain = (totalRainNum as num).toDouble();
+    final avgHum = (avgHumNum as num).toDouble();
 
     return Container(
       padding: const EdgeInsets.all(16),

@@ -955,6 +955,27 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
       ),
     );
   }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+        ),
+      ],
+    );
+  }
 }
 
 // --- Local Widget Class from Prediction Screen ---

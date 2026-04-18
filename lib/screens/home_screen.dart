@@ -86,6 +86,10 @@ class _HomeScreenState extends State<HomeScreen>
         temperature: weather.temperature,
         humidity: weather.humidity.toDouble(),
         rainfall: weather.rainfall.toDouble(),
+        nitrogen: 90.0,
+        phosphorus: 42.0,
+        potassium: 43.0,
+        ph: 6.5,
       );
       if (preds.isNotEmpty) {
         pred = preds.first;

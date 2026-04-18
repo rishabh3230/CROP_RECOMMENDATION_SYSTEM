@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../services/weather_service.dart';
 import '../models/weather_model.dart';
+import '../services/soil_service.dart';
 
 class CropIntelligenceScreen extends StatefulWidget {
   final int initialTab;
@@ -20,108 +21,46 @@ class CropIntelligenceScreen extends StatefulWidget {
 
 class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     with TickerProviderStateMixin {
-  late TabController _tabController;
-
+  
   // --- Common Data ---
   double _lat = 30.7333;
   double _lon = 76.7794;
   String _locationName = 'Punjab, India';
   Map<String, dynamic>? _weatherAnalysis;
-  bool _isDataLoaded = false;
+  bool _isLoading = true;
 
-  // --- Prediction Tab Data ---
-  List<CropPrediction> _predictions = [];
-  bool _predictLoading = false;
-  bool _predictHasResult = false;
-  String _selectedLandType = 'Loam';
-  final List<String> _landTypes = [
-    'Loam', 'Clay', 'Sandy', 'Silt', 'Black', 'Alluvial', 'Red'
-  ];
-  late AnimationController _predictListCtrl;
+  // --- Scientific Soil Data ---
+  double _nitrogen = 90.0;
+  double _phosphorus = 42.0;
+  double _potassium = 43.0;
+  double _ph = 6.5;
+  String _soilSource = 'Local/Manual';
 
-  // --- Best Crop Tab Data ---
-  List<BestCropRecommendation> _recs = [];
-  List<HistoricalWeather> _historicalData = [];
-  bool _recsLoading = true;
-  int _selectedRecIdx = 0;
-  late AnimationController _recsCardCtrl;
-  late AnimationController _recsRadarCtrl;
-  late Animation<double> _recsRadarAnim;
+  // --- Recommendations ---
+  List<CropPrediction> _recommendations = [];
+  
+  late AnimationController _contentFadeCtrl;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-        length: 2, vsync: this, initialIndex: widget.initialTab);
 
-    // Prediction Anims
-    _predictListCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
-
-    // Best Crop Anims
-    _recsCardCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 500));
-    _recsRadarCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 700));
-    _recsRadarAnim =
-        CurvedAnimation(parent: _recsRadarCtrl, curve: Curves.easeOutCubic);
+    _contentFadeCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
 
     _initIntelligenceData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _predictListCtrl.dispose();
-    _recsCardCtrl.dispose();
-    _recsRadarCtrl.dispose();
+    _contentFadeCtrl.dispose();
     super.dispose();
   }
 
-  // --- Prediction Logic ---
-  Future<void> _runQuickPrediction() async {
-    if (!_isDataLoaded || _weatherAnalysis == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for location and weather data to sync...')),
-      );
-      return;
-    }
-
-    setState(() {
-      _predictLoading = true;
-      _predictHasResult = false;
-    });
-
-    try {
-      final results = await CropPredictionService.predictCrop(
-        temperature: (_weatherAnalysis!['avg_temp'] as num).toDouble(),
-        humidity: (_weatherAnalysis!['avg_humidity'] as num).toDouble(),
-        rainfall: (_weatherAnalysis!['total_rainfall'] as num).toDouble(),
-      );
-      if (mounted) {
-        setState(() {
-          _predictions = results;
-          _predictLoading = false;
-          _predictHasResult = true;
-        });
-        _predictListCtrl.reset();
-        _predictListCtrl.forward();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _predictLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to get predictions: \$e')),
-        );
-      }
-    }
-  }
-
-  // --- Best Crop Logic ---
-  // --- Data & Location Initialization ---
   Future<void> _initIntelligenceData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    
     final locationService = LocationService();
     Position? pos;
     String? localPlace;
@@ -148,89 +87,71 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
       debugPrint('Real-time weather fetch failed: $e');
     }
 
+    // ATTEMPT AUTO-SOIL FETCH
+    final soilService = SoilService();
+    SoilData? soilValues;
     try {
-      // Fetch ML-specific analysis if backend is available
-      debugPrint('Syncing Deep Analysis with backend: ${CropPredictionService.baseUrl}');
-      final analysis = await CropPredictionService.fetchWeatherAnalysis(lat, lon);
-      
-      // Sync real-time data into the analysis map ONLY if keys are missing/null
+      soilValues = await soilService.fetchSoilData(lat, lon);
+    } catch (e) {
+      debugPrint('Auto-soil fetch failed: $e');
+    }
+
+    // Attempt to fetch historical analysis
+    Map<String, dynamic>? analysis;
+    try {
+      analysis = await CropPredictionService.fetchWeatherAnalysis(lat, lon);
       if (realWeather != null) {
         analysis['avg_temp'] ??= analysis['avgTemp'] ?? realWeather.temperature;
         analysis['avg_humidity'] ??= analysis['avgHumidity'] ?? realWeather.humidity.toDouble();
       }
-      
-      if (mounted) {
-        setState(() {
-          _lat = lat;
-          _lon = lon;
-          _locationName = localPlace ?? 'Unknown Location';
-          _weatherAnalysis = analysis;
-          _isDataLoaded = true;
-          _recsLoading = false;
-        });
-        debugPrint('Deep Analysis synced successfully with backend');
-        _recsCardCtrl.forward();
-        _recsRadarCtrl.forward();
-      }
     } catch (e) {
-      debugPrint('Deep Analysis backend fetch failed, using OWM fallback: $e');
-      
-      // Fallback: If custom analysis backend fails, use real-time OWM data to build a basic analysis
+      debugPrint('Deep Analysis fetch failed: $e');
       if (realWeather != null) {
-        final history = List.generate(15, (i) => {
-          'date': 'Day ${i + 1}',
-          'rainfall': (realWeather!.description.toLowerCase().contains('rain') ? 5.0 : 0.0) + (i % 3 == 0 ? 2.0 : 0.0),
-        });
-        
-        double calculatedTotalRain = 0;
-        for (var h in history) {
-          calculatedTotalRain += (h['rainfall'] as num).toDouble();
-        }
-
-        final fallbackAnalysis = {
+        analysis = {
           'avg_temp': realWeather.temperature,
           'avg_humidity': realWeather.humidity.toDouble(),
-          'total_rainfall': calculatedTotalRain, 
-          'history': history,
+          'total_rainfall': 120.0, 
+          'history': List.generate(10, (i) => {'date': 'Day $i', 'rainfall': i * 2.0}),
         };
-        
-        if (mounted) {
-          setState(() {
-            _lat = lat;
-            _lon = lon;
-            _locationName = localPlace ?? 'Unknown Location';
-            _weatherAnalysis = fallbackAnalysis;
-            _isDataLoaded = true;
-            _recsLoading = false;
-          });
-          debugPrint('Deep Analysis resolved via fallback successfully');
-          _recsCardCtrl.forward();
-          _recsRadarCtrl.forward();
-        }
-      } else {
-        // Absolute fallback if everything fails
-        if (mounted) {
-          setState(() {
-            _isDataLoaded = true; // Still set to true to avoid infinite loading
-            _recsLoading = false;
-            _weatherAnalysis = {
-              'avg_temp': 25.0,
-              'total_rainfall': 0.0,
-              'history': [],
-            };
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sync Error: Unable to fetch weather data for analysis.')),
-          );
-        }
       }
     }
-  }
 
-  void _selectRecommendation(int i) {
-    setState(() => _selectedRecIdx = i);
-    _recsRadarCtrl.reset();
-    _recsRadarCtrl.forward();
+    // RUN ML PREDICTION AUTOMATICALLY
+    List<CropPrediction> predictions = [];
+    if (analysis != null) {
+      try {
+        predictions = await CropPredictionService.predictCrop(
+          temperature: (analysis['avg_temp'] ?? analysis['avgTemp'] ?? 25.0) as double,
+          humidity: (analysis['avg_humidity'] ?? analysis['avgHumidity'] ?? 60.0) as double,
+          rainfall: (analysis['total_rainfall'] ?? analysis['totalRainfall'] ?? 100.0) as double,
+          nitrogen: _nitrogen,
+          phosphorus: _phosphorus,
+          potassium: _potassium,
+          ph: _ph,
+        );
+      } catch (e) {
+        debugPrint('ML Prediction failed: $e');
+        final mockResults = await AgroService.predictCrops(lat, lon, 'Loam');
+        predictions = mockResults;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _lat = lat;
+        _lon = lon;
+        _locationName = localPlace ?? 'Unknown Location';
+        _weatherAnalysis = analysis;
+        if (soilValues != null) {
+          _nitrogen = soilValues.nitrogen;
+          _ph = soilValues.ph;
+          _soilSource = soilValues.source;
+        }
+        _recommendations = predictions;
+        _isLoading = false;
+      });
+      _contentFadeCtrl.forward();
+    }
   }
 
   @override
@@ -240,15 +161,29 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
         child: Column(
           children: [
             _buildTopBar(),
-            _buildTabBar(),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPredictionTab(),
-                  _buildBestCropTab(),
-                ],
-              ),
+              child: _isLoading
+                  ? const Center(
+                      child: LoadingOverlay(message: 'Intelligently analyzing your location...'),
+                    )
+                  : FadeTransition(
+                      opacity: _contentFadeCtrl,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildActiveLocationPanel(),
+                            const SizedBox(height: 20),
+                            _buildSoilProfileSection(),
+                            const SizedBox(height: 24),
+                            _buildAnalysisResultList(),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -260,937 +195,657 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Crop Intelligence',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'AI Intelligence',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -1.0,
                 ),
-                Text(
-                  'AI-powered agricultural analysis',
-                  style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
-                ),
-              ],
-            ),
+              ),
+              Text(
+                'Real-time crop-climate sync',
+                style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+              ),
+            ],
           ),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.accent.withValues(alpha: 0.12),
+              color: AppTheme.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
             ),
-            child: const Text('🧠', style: TextStyle(fontSize: 20)),
+            child: const Icon(Icons.hub_rounded, color: AppTheme.accent, size: 22),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTabBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.border, width: 1),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          color: AppTheme.accent.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.5)),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        labelColor: AppTheme.accent,
-        unselectedLabelColor: AppTheme.textMuted,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        tabs: const [
-          Tab(text: 'Quick Predict'),
-          Tab(text: 'Deep Analysis'),
-        ],
-      ),
-    );
-  }
-
-  // --- SHARED WIDGETS ---
-  Widget _buildLocationCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: AppTheme.accentCool.withValues(alpha: 0.25), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppTheme.accentCool.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.gps_fixed_rounded,
-                color: AppTheme.accentCool, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: const BoxDecoration(
-                          color: AppTheme.accent, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'GPS Location Active',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.accent,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _locationName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                Text(
-                  '${_lat.toStringAsFixed(4)}°N, ${_lon.toStringAsFixed(4)}°E',
-                  style:
-                      const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- TAB 1: PREDICTION ---
-  Widget _buildPredictionTab() {
-    return _predictLoading
-        ? const LoadingOverlay(message: 'Running ML prediction model...')
-        : SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildLocationCard(),
-                const SizedBox(height: 20),
-                _buildLandTypeSelector(),
-                const SizedBox(height: 20),
-                _buildPredictButton(),
-                if (_predictHasResult) ...[
-                  const SizedBox(height: 24),
-                  _buildPredictResultHeader(),
-                  const SizedBox(height: 14),
-                  ..._buildPredictionCards(),
-                ],
-              ],
-            ),
-          );
-  }
-
-  Widget _buildLandTypeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Select Land Type',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _landTypes.map((type) {
-            final selected = type == _selectedLandType;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedLandType = type),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppTheme.accent.withValues(alpha: 0.15)
-                      : AppTheme.card,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected ? AppTheme.accent : AppTheme.border,
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Text(
-                  type,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? AppTheme.accent : AppTheme.textSecondary,
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPredictButton() {
-    return GestureDetector(
-      onTap: _runQuickPrediction,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4FA82E), AppTheme.accent],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.accent.withValues(alpha: 0.3),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 10),
-            Text(
-              'Run ML Prediction',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPredictResultHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'ML Results',
-                style: TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'Based on current weather data',
-              style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '${_predictions.length} crops suitable for your land',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.textPrimary,
-            letterSpacing: -0.4,
-          ),
-        ),
-      ],
-    );
-  }
-
-  List<Widget> _buildPredictionCards() {
-    return List.generate(_predictions.length, (i) {
-      final crop = _predictions[i];
-      return TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: Duration(milliseconds: 400 + (i * 80)),
-        curve: Curves.easeOutCubic,
-        builder: (_, v, child) => Transform.translate(
-          offset: Offset(0, 20 * (1 - v)),
-          child: Opacity(opacity: v, child: child),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: _PredictionCard(crop: crop, rank: i + 1),
-        ),
-      );
-    });
-  }
-
-  // --- TAB 2: DEEP ANALYSIS (METEOSTAT) ---
-  Widget _buildBestCropTab() {
-    if (!_isDataLoaded || _weatherAnalysis == null) {
-      return const LoadingOverlay(message: 'Connecting to Meteostat services...');
-    }
-
-    final history = _weatherAnalysis!['history'] as List;
-    final List<double> rainValues = history.map((h) => (h['rainfall'] as num).toDouble()).toList();
-    final List<String> rainLabels = history.map((h) => h['date'] as String).toList();
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildAnalysisInfo(),
-          const SizedBox(height: 20),
-          _buildHistoricalChart(rainValues, rainLabels),
-          const SizedBox(height: 24),
-          _buildDataInsightCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalysisInfo() {
-    // Robust lookup for keys that might vary between naming conventions
-    final avgTempNum = _weatherAnalysis?['avg_temp'] ?? _weatherAnalysis?['avgTemp'] ?? 0.0;
-    final totalRainNum = _weatherAnalysis?['total_rainfall'] ?? _weatherAnalysis?['totalRainfall'] ?? 0.0;
-    final avgHumNum = _weatherAnalysis?['avg_humidity'] ?? _weatherAnalysis?['avgHumidity'] ?? 0.0;
-
-    final avgTemp = (avgTempNum as num).toDouble();
+  Widget _buildActiveLocationPanel() {
+    final avgTemp = (_weatherAnalysis?['avg_temp'] ?? _weatherAnalysis?['avgTemp'] ?? 25.0) as double;
+    final totalRainNum = _weatherAnalysis?['total_rainfall'] ?? _weatherAnalysis?['totalRainfall'] ?? 100.0;
     final totalRain = (totalRainNum as num).toDouble();
+    final avgHumNum = _weatherAnalysis?['avg_humidity'] ?? _weatherAnalysis?['avgHumidity'] ?? 60.0;
     final avgHum = (avgHumNum as num).toDouble();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.accentPurple.withValues(alpha: 0.12),
-            AppTheme.card,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: AppTheme.accentPurple.withValues(alpha: 0.25), width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _recsInfoChip('📅', 'Past 90 Days', 'Data Period'),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.border, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-          Container(width: 1, height: 40, color: AppTheme.border),
-          Expanded(child: _recsInfoChip('🌡️', '\$avgTemp°C', 'Avg Temp')),
-          Container(width: 1, height: 40, color: AppTheme.border),
-          Expanded(child: _recsInfoChip('🌧️', '\${totalRain}mm', 'Total Rain')),
         ],
       ),
-    );
-  }
-
-  Widget _recsInfoChip(String icon, String value, String label) {
-    return Column(
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 18)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        Text(label,
-            style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-      ],
-    );
-  }
-
-  Widget _buildHistoricalChart(List<double> values, List<String> labels) {
-    if (values.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          title: 'Meteostat Historical Rainfall',
-          subtitle: 'Daily precipitation patterns (Last 3 Months)',
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border, width: 1),
-          ),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 100,
-                child: MiniBarChart(
-                  values: values,
-                  labels: labels,
-                  color: AppTheme.accentCool,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  _legendDot(AppTheme.accentCool, 'Rainfall (mm)'),
-                  const Text(
-                    'Data sourced from local weather stations via Meteostat',
-                    style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDataInsightCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.accentCool.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.accentCool.withValues(alpha: 0.2)),
-      ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.insights_rounded, color: AppTheme.accentCool, size: 20),
-              SizedBox(width: 10),
-              Text(
-                'Climate Insights',
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentCool.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_rounded, color: AppTheme.accentCool, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      _locationName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accentCool,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              const Text(
+                'LIVE SYNC',
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.accent,
+                  letterSpacing: 1.0,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 16),
+          const Text(
+            'Current Environmental Context',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
           Text(
-            'The historical weather pattern from the last 90 days is used to generate stable averages for the ML prediction model, ensuring that recommendations are based on recent regional trends.',
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+            'Coordinates: ${_lat.toStringAsFixed(4)}, ${_lon.toStringAsFixed(4)}',
+            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(child: _statMiniChip('🌡️', '${avgTemp.toStringAsFixed(1)}°C', 'Avg Temp')),
+              const SizedBox(width: 12),
+              Expanded(child: _statMiniChip('🌧️', '${totalRain.toStringAsFixed(0)}mm', 'Rainfall')),
+              const SizedBox(width: 12),
+              Expanded(child: _statMiniChip('💧', '${avgHum.toStringAsFixed(0)}%', 'Humidity')),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTopPickLabel() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppTheme.accentPurple.withValues(alpha: 0.2),
-                AppTheme.accent.withValues(alpha: 0.2),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: AppTheme.accentPurple.withValues(alpha: 0.4), width: 1),
+  Widget _statMiniChip(String emoji, String val, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 4),
+          Text(
+            val,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
           ),
-          child: const Text(
-            '🤖 ML Recommendation',
-            style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.accentPurple,
-                fontWeight: FontWeight.w700),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildRecommendationCards() {
-    return Column(
-      children: _recs.asMap().entries.map((e) {
-        final i = e.key;
-        final rec = e.value;
-        final isSelected = i == _selectedRecIdx;
-        final colors = [
-          AppTheme.accent,
-          AppTheme.accentWarm,
-          AppTheme.accentCool
-        ];
-        final color = colors[i % colors.length];
-
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 400 + i * 120),
-          curve: Curves.easeOutCubic,
-          builder: (_, v, child) => Transform.translate(
-            offset: Offset(30 * (1 - v), 0),
-            child: Opacity(opacity: v, child: child),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: GestureDetector(
-              onTap: () => _selectRecommendation(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color:
-                      isSelected ? color.withValues(alpha: 0.08) : AppTheme.card,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: isSelected
-                        ? color.withValues(alpha: 0.5)
-                        : AppTheme.border,
-                    width: isSelected ? 1.5 : 1,
+  Widget _buildSoilProfileSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.accentWarm.withValues(alpha: 0.1), AppTheme.card],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.accentWarm.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Soil Health Profile',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _soilSource.contains('Manual')
+                              ? AppTheme.textMuted.withValues(alpha: 0.1)
+                              : Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _soilSource,
+                          style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              color: _soilSource.contains('Manual')
+                                  ? AppTheme.textMuted
+                                  : Colors.blue),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'Manual Soil Test Sync',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: _showSoilEditBottomSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentWarm,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.edit_note_rounded, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        'Edit Stats',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Text(rec.emoji, style: const TextStyle(fontSize: 34)),
-                        if (i == 0)
-                          Container(
-                            width: 18,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Center(
-                              child: Text('★',
-                                  style: TextStyle(
-                                      fontSize: 10, color: Colors.white)),
-                            ),
-                          ),
-                      ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _soilMetric('N', _nitrogen.toInt().toString(), 'Nitrogen', AppTheme.accent),
+              _soilMetric('P', _phosphorus.toInt().toString(), 'Phosphorus', Colors.orange),
+              _soilMetric('K', _potassium.toInt().toString(), 'Potassium', Colors.purple),
+              _soilMetric('pH', _ph.toStringAsFixed(1), 'Acidity', Colors.teal),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _soilMetric(String tag, String val, String label, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              tag,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: color),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            val,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9, color: AppTheme.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSoilEditBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+              decoration: const BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 24),
+                  const Text('Update Soil Metrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                  const Text('Adjust values based on your soil test report', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+                  const SizedBox(height: 32),
+                  _soilSlider('Nitrogen (N)', _nitrogen, 0, 150, (v) => setModalState(() => _nitrogen = v), AppTheme.accent),
+                  _soilSlider('Phosphorus (P)', _phosphorus, 0, 150, (v) => setModalState(() => _phosphorus = v), Colors.orange),
+                  _soilSlider('Potassium (K)', _potassium, 0, 150, (v) => setModalState(() => _potassium = v), Colors.purple),
+                  _soilSlider('Soil pH', _ph, 3.0, 10.0, (v) => setModalState(() => _ph = v), Colors.teal),
+                  const SizedBox(height: 32),
+                  GestureDetector(
+                    onTap: () {
+                      _soilSource = 'Manual Override ✏️';
+                      Navigator.pop(context);
+                      _initIntelligenceData();
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: AppTheme.accent.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Update Predictions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            rec.cropName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          ConfidenceBar(value: rec.score / 100, color: color),
-                        ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _soilSlider(String label, double val, double min, double max, Function(double) onChanged, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+              Text(val.toStringAsFixed(label.contains('pH') ? 1 : 0), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              activeTrackColor: color,
+              thumbColor: color,
+              inactiveTrackColor: color.withValues(alpha: 0.1),
+            ),
+            child: Slider(
+              value: val,
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalysisResultList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Best Suited Crops',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  'ML-Ranked Compatibility',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+            GestureDetector(
+              onTap: _initIntelligenceData,
+              child: const Icon(Icons.refresh_rounded, color: AppTheme.accent, size: 24),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_recommendations.isEmpty)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: Text('No recommendations found for this climate profile.'),
+            ),
+          )
+        else
+          ...List.generate(_recommendations.length, (i) {
+            final crop = _recommendations[i];
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: Duration(milliseconds: 500 + (i * 100)),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, child) => Transform.translate(
+                offset: Offset(0, 30 * (1 - v)),
+                child: Opacity(opacity: v, child: child),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _RecommendationHeroCard(crop: crop, rank: i + 1),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _RecommendationHeroCard extends StatelessWidget {
+  final CropPrediction crop;
+  final int rank;
+
+  const _RecommendationHeroCard({required this.crop, required this.rank});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isBest = rank == 1;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isBest ? AppTheme.accent : AppTheme.border,
+          width: isBest ? 2 : 1,
+        ),
+        boxShadow: isBest
+            ? [
+                BoxShadow(
+                  color: AppTheme.accent.withValues(alpha: 0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: (isBest ? AppTheme.accent : AppTheme.accentCool).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  crop.emoji,
+                  style: const TextStyle(fontSize: 32),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isBest)
+                      const Text(
+                        '🎖️ PERFECT MATCH',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.accent,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    Text(
+                      crop.cropName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${rec.score.toInt()}',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: color,
-                            letterSpacing: -1,
-                          ),
-                        ),
-                        const Text('score',
-                            style: TextStyle(
-                                fontSize: 10, color: AppTheme.textMuted)),
-                      ],
+                    Text(
+                      'Expected Yield: ${crop.expectedYield.toStringAsFixed(1)} tons/ha',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isBest ? AppTheme.accent : AppTheme.surface,
+                  borderRadius: BorderRadius.circular(30),
+                  border: isBest ? null : Border.all(color: AppTheme.border),
+                ),
+                child: Text(
+                  '${(crop.confidence * 100).toInt()}% Confidence',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isBest ? Colors.white : AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppTheme.border),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_rounded, size: 14, color: AppTheme.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                'Season: ${crop.season}',
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              const Icon(Icons.layers_rounded, size: 14, color: AppTheme.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                'Soil: ${crop.soilType}',
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          if (isBest) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => _showDeepAnalysisModal(context, crop),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppTheme.accent, AppTheme.accent.withValues(alpha: 0.8)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                alignment: Alignment.center,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.analytics_outlined, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Deep Analysis 📊',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildDetailPanel() {
-    final rec = _recs[_selectedRecIdx];
-    final colors = [AppTheme.accent, AppTheme.accentWarm, AppTheme.accentCool];
-    final color = colors[_selectedRecIdx % colors.length];
-
-    return FadeTransition(
-      opacity: _recsRadarAnim,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            title: '${rec.emoji} ${rec.cropName} Deep Analysis',
-            subtitle: 'ML-scored across 4 dimensions',
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppTheme.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: RadarChart(
-                      values: [
-                        rec.climateMatch,
-                        rec.soilMatch,
-                        rec.profitability,
-                        rec.waterEfficiency,
-                      ],
-                      labels: ['Climate', 'Soil', 'Profit', 'Water'],
-                      color: color,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _scoreRow(
-                    '🌡️', 'Climate Match', rec.climateMatch, AppTheme.accentCool),
-                const SizedBox(height: 10),
-                _scoreRow(
-                    '🪨', 'Soil Match', rec.soilMatch, AppTheme.accentWarm),
-                const SizedBox(height: 10),
-                _scoreRow('💰', 'Profitability', rec.profitability, AppTheme.accent),
-                const SizedBox(height: 10),
-                _scoreRow(
-                    '💧', 'Water Efficiency', rec.waterEfficiency, AppTheme.accentCool),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Why this crop?',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        rec.reasoning,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                        child: _proConList('✅ Pros', rec.pros, AppTheme.accent)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child:
-                            _proConList('⚠️ Cons', rec.cons, AppTheme.accentWarm)),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _scoreRow(String icon, String label, double value, Color color) {
-    return Row(
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 14)),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 90,
-          child: Text(
-            label,
-            style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500),
-          ),
-        ),
-        Expanded(
-          child: ConfidenceBar(value: value, color: color, height: 5),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '${(value * 100).toInt()}%',
-          style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700, color: color),
-        ),
-      ],
-    );
-  }
-
-  Widget _proConList(String title, List<String> items, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-          const SizedBox(height: 8),
-          ...items.map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  item,
-                  style: const TextStyle(
-                      fontSize: 11, color: AppTheme.textSecondary, height: 1.4),
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
-        ),
-      ],
+  void _showDeepAnalysisModal(BuildContext context, CropPrediction crop) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _DeepAnalysisModal(crop: crop),
     );
   }
 }
 
-// --- Local Widget Class from Prediction Screen ---
-class _PredictionCard extends StatefulWidget {
+class _DeepAnalysisModal extends StatelessWidget {
   final CropPrediction crop;
-  final int rank;
-
-  const _PredictionCard({required this.crop, required this.rank});
-
-  @override
-  State<_PredictionCard> createState() => _PredictionCardState();
-}
-
-class _PredictionCardState extends State<_PredictionCard> {
-  bool _expanded = false;
-
-  Color get _rankColor {
-    switch (widget.rank) {
-      case 1:
-        return AppTheme.accent;
-      case 2:
-        return AppTheme.accentWarm;
-      case 3:
-        return AppTheme.accentCool;
-      default:
-        return AppTheme.textMuted;
-    }
-  }
+  const _DeepAnalysisModal({required this.crop});
 
   @override
   Widget build(BuildContext context) {
-    final crop = widget.crop;
-    final pct = (crop.confidence * 100).toInt();
-
-    return GestureDetector(
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(18),
-          border:
-              Border.all(color: _rankColor.withValues(alpha: 0.2), width: 1),
-        ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: SingleChildScrollView(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Text(crop.emoji, style: const TextStyle(fontSize: 32)),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            crop.cropName,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _rankColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '#${widget.rank}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: _rankColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        crop.season,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(width: 12),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$pct%',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: _rankColor,
-                        letterSpacing: -0.5,
-                      ),
+                      '${crop.cropName} Analysis',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
                     ),
-                    const Text(
-                      'confidence',
-                      style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                    ),
+                    const Text('Scientific Compatibility Report', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            ConfidenceBar(value: crop.confidence, color: _rankColor),
-            const SizedBox(height: 12),
+            const SizedBox(height: 32),
             Row(
               children: [
-                _infoChip('🌾', '${crop.expectedYield}t/ha'),
-                const SizedBox(width: 8),
-                _infoChip('🪨', crop.soilType),
+                Expanded(child: _buildMatchCircle('Climate', crop.climateMatch, Colors.blue)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildMatchCircle('Soil Health', crop.soilMatch, Colors.green)),
               ],
             ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox(height: 0),
-              secondChild: _buildExpanded(crop),
-              crossFadeState: _expanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 250),
+            const SizedBox(height: 32),
+            _buildSectionHeader('AI Reasoning'),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Text(
+                crop.reasoning,
+                style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _expanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  color: AppTheme.textMuted,
-                  size: 18,
+            const SizedBox(height: 32),
+            _buildSectionHeader('Ideal Requirements'),
+            _buildStatComparison('Temperature', '${crop.idealStats['temp']?.toStringAsFixed(1) ?? "N/A"}°C', Icons.thermostat_rounded),
+            _buildStatComparison('Humidity', '${crop.idealStats['hum']?.toStringAsFixed(0) ?? "N/A"}%', Icons.water_drop_rounded),
+            _buildStatComparison('Rainfall', '${crop.idealStats['rain']?.toStringAsFixed(0) ?? "N/A"}mm', Icons.cloudy_snowing),
+            _buildStatComparison('Soil pH', '${crop.idealStats['ph']?.toStringAsFixed(1) ?? "N/A"}', Icons.science_rounded),
+            _buildStatComparison('Nitrogen (N)', '${crop.idealStats['N']?.toStringAsFixed(0) ?? "N/A"} mg/kg', Icons.grass_rounded),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ],
+                alignment: Alignment.center,
+                child: const Text('Back to Dashboard', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
             ),
           ],
         ),
@@ -1198,68 +853,50 @@ class _PredictionCardState extends State<_PredictionCard> {
     );
   }
 
-  Widget _infoChip(String icon, String label) {
+  Widget _buildMatchCircle(String label, double match, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 12)),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w600),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${(match * 100).toInt()}%',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: color),
+              ),
+            ],
           ),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
   }
 
-  Widget _buildExpanded(CropPrediction crop) {
+  Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+      ),
+    );
+  }
+
+  Widget _buildStatComparison(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
         children: [
-          const Divider(color: AppTheme.border, height: 1),
-          const SizedBox(height: 12),
-          const Text(
-            'Requirements',
-            style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textMuted,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5),
-          ),
-          const SizedBox(height: 8),
-          ...crop.requirements.map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: _rankColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      r,
-                      style: const TextStyle(
-                          fontSize: 13, color: AppTheme.textSecondary),
-                    ),
-                  ],
-                ),
-              )),
+          Icon(icon, size: 16, color: AppTheme.textMuted),
+          const SizedBox(width: 12),
+          Text(label, style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         ],
       ),
     );

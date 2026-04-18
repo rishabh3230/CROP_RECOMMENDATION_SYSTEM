@@ -85,6 +85,12 @@ class CropPrediction {
   final double expectedYield;
   final List<String> requirements;
   final String soilType;
+  
+  // Analytical breakdown
+  final double climateMatch;
+  final double soilMatch;
+  final String reasoning;
+  final Map<String, dynamic> idealStats;
 
   const CropPrediction({
     required this.cropName,
@@ -94,17 +100,25 @@ class CropPrediction {
     this.expectedYield = 0.0,
     this.requirements = const [],
     this.soilType = 'Varied',
+    this.climateMatch = 0.0,
+    this.soilMatch = 0.0,
+    this.reasoning = '',
+    this.idealStats = const {},
   });
 
   factory CropPrediction.fromJson(Map<String, dynamic> json) {
     return CropPrediction(
-      cropName: json['crop_name'] ?? json['cropName'] ?? 'Unknown',
+      cropName: json['crop'] ?? json['crop_name'] ?? json['cropName'] ?? 'Unknown',
       confidence: (json['confidence'] ?? 0.0).toDouble(),
-      emoji: json['emoji'] ?? _getDefaultEmoji(json['crop_name'] ?? json['cropName']),
+      emoji: json['emoji'] ?? _getDefaultEmoji(json['crop'] ?? json['crop_name'] ?? json['cropName']),
       season: json['season'] ?? 'Check Guide',
       expectedYield: (json['expected_yield'] ?? json['expectedYield'] ?? 0.0).toDouble(),
       requirements: List<String>.from(json['requirements'] ?? []),
       soilType: json['soil_type'] ?? json['soilType'] ?? 'Loam',
+      climateMatch: (json['climate_match'] ?? 0.0).toDouble(),
+      soilMatch: (json['soil_match'] ?? 0.0).toDouble(),
+      reasoning: json['reasoning'] ?? '',
+      idealStats: Map<String, dynamic>.from(json['ideal_stats'] ?? {}),
     );
   }
 

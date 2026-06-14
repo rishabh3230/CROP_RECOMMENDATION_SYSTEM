@@ -25,9 +25,8 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
   String locationName = "Fetching location...";
 
   // Constants
-  final String meteostatApiKey = "YOUR_METEOSTAT_API_KEY"; // Placeholder
-  final String backendUrl =
-      "http://localhost:8000/predict"; // Replace with actual IP for device
+  // backendUrl: replace with your device/server IP when running on a physical phone
+  final String backendUrl = "http://10.0.2.2:8000/predict";
 
   @override
   void initState() {
@@ -188,22 +187,33 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
   }
 
   Future<Position> _getGeoLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) throw Exception('Location services are disabled.');
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception(
+          'Location services are disabled. Please enable GPS in Settings.');
+    }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception('Location permissions are denied');
+        throw Exception('Location permissions were denied.');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Location permissions are permanently denied.');
+      await Geolocator.openAppSettings();
+      throw Exception(
+          'Location permissions permanently denied. Please grant them in App Settings.');
     }
 
-    return await Geolocator.getCurrentPosition();
+    // geolocator 13.x requires explicit locationSettings
+    return await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> _fetchWeather(double lat, double lon) async {
@@ -211,40 +221,48 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
     final twoMonthsAgo = now.subtract(const Duration(days: 60));
     final formatter = DateFormat('yyyy-MM-dd');
 
-    // Using Meteostat Point Daily API
+    // Open-Meteo: free weather API, no API key required
     final url =
-        "https://api.meteostat.net/v2/point/daily?lat=$lat&lon=$lon&start=${formatter.format(twoMonthsAgo)}&end=${formatter.format(now)}";
+        'https://api.open-meteo.com/v1/forecast'
+        '?latitude=$lat&longitude=$lon'
+        '&daily=temperature_2m_mean,precipitation_sum'
+        '&start_date=${formatter.format(twoMonthsAgo)}'
+        '&end_date=${formatter.format(now)}';
 
     try {
       final response = await http
-          .get(Uri.parse(url), headers: {"x-api-key": meteostatApiKey});
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'] as List;
-        double sumTemp = 0;
-        double totalRain = 0;
-        List<double> last10Rain = [];
+        final body = jsonDecode(response.body);
+        final daily = body['daily'];
+        final temps = (daily['temperature_2m_mean'] as List)
+            .map((v) => (v ?? 0.0) as num)
+            .toList();
+        final prcp = (daily['precipitation_sum'] as List)
+            .map((v) => (v ?? 0.0) as num)
+            .toList();
 
-        for (var i = 0; i < data.length; i++) {
-          sumTemp += (data[i]['tavg'] ?? 0);
-          totalRain += (data[i]['prcp'] ?? 0);
-        }
-
-        // Last 10 days rainfall
-        for (var i = data.length - 10; i < data.length; i++) {
-          if (i >= 0) last10Rain.add((data[i]['prcp'] ?? 0).toDouble());
-        }
+        final double avgTemp =
+            temps.isEmpty ? 25.5 : temps.reduce((a, b) => a + b) / temps.length;
+        final double totalRain =
+            prcp.isEmpty ? 0 : prcp.reduce((a, b) => a + b).toDouble();
+        final List<double> last10Rain = prcp
+            .skip(prcp.length > 10 ? prcp.length - 10 : 0)
+            .map((v) => v.toDouble())
+            .toList();
 
         return {
-          "avg_temp": sumTemp / data.length,
+          "avg_temp": avgTemp,
           "total_rainfall": totalRain,
           "last_10_days_rainfall": last10Rain,
         };
       }
     } catch (e) {
-      print("Weather fetch error: $e");
+      print("Weather fetch error (Open-Meteo): $e");
     }
 
-    // Fallback Mock Data if API fails
+    // Fallback mock data if API fails
     return {
       "avg_temp": 25.5,
       "total_rainfall": 120.0,

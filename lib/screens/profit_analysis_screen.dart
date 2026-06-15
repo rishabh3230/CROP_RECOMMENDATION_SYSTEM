@@ -13,6 +13,7 @@ class ProfitAnalysisScreen extends StatefulWidget {
 
 class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
     with SingleTickerProviderStateMixin {
+  final ScrollController _scrollController = ScrollController();
   List<CropProfit> _allCrops = [];
   CropProfit? _selectedCrop;
   bool _loading = true;
@@ -36,6 +37,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _searchCtrl.dispose();
     _detailCtrl.dispose();
     super.dispose();
@@ -76,7 +78,15 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
     setState(() => _selectedCrop = crop);
     _detailCtrl.reset();
     _detailCtrl.forward();
-    // Scroll to detail — handled via scroll controller in full impl
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   @override
@@ -90,6 +100,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   _buildHeader(),
                   Expanded(
                     child: SingleChildScrollView(
+                      controller: _scrollController,
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                       child: Column(
@@ -176,7 +187,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
         Expanded(
           child: StatCard(
             label: 'Top Earner',
-            value: highest != null ? '${highest.emoji} \$${highest.profitPerHectare.toStringAsFixed(0)}' : '-',
+            value: highest != null ? '${highest.emoji} ₹${highest.profitPerHectare.toStringAsFixed(0)}' : '-',
             icon: Icons.star_rounded,
             color: AppTheme.accentWarm,
           ),
@@ -319,7 +330,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -430,19 +441,19 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   Expanded(
                       child: _profitStat(
                           'Profit/Ha',
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}',
                           AppTheme.accentWarm)),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _profitStat(
                           'Market Price',
-                          '\$${crop.marketPrice.toStringAsFixed(0)}/t',
+                          '₹${crop.marketPrice.toStringAsFixed(0)}/t',
                           AppTheme.accentCool)),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _profitStat(
                           'Production',
-                          '\$${crop.productionCost.toStringAsFixed(0)}',
+                          '₹${crop.productionCost.toStringAsFixed(0)}',
                           AppTheme.accentRed)),
                 ],
               ),
@@ -577,7 +588,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}/ha',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}/ha',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
@@ -585,7 +596,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                           ),
                         ),
                         Text(
-                          '+\$${(crop.profitPerHectare - _selectedCrop!.profitPerHectare).toStringAsFixed(0)} more',
+                          '+₹${(crop.profitPerHectare - _selectedCrop!.profitPerHectare).toStringAsFixed(0)} more',
                           style: const TextStyle(
                               fontSize: 10, color: AppTheme.accent),
                         ),

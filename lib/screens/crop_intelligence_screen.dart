@@ -395,7 +395,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
                       ),
                     ],
                   ),
-                  Text(
+                  const Text(
                     'Manual Soil Test Sync',
                     style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
                   ),

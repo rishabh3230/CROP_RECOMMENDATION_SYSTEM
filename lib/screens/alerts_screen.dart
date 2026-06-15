@@ -5,7 +5,6 @@ import '../services/agro_service.dart';
 import '../models/models.dart';
 import '../services/location_service.dart';
 import '../services/weather_service.dart';
-import '../models/weather_model.dart';
 import 'package:geolocator/geolocator.dart';
 
 class AlertsScreen extends StatefulWidget {

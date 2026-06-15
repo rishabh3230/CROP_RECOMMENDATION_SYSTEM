@@ -176,7 +176,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
         Expanded(
           child: StatCard(
             label: 'Top Earner',
-            value: highest?.emoji ?? '-',
+            value: highest != null ? '${highest.emoji} \$${highest.profitPerHectare.toStringAsFixed(0)}' : '-',
             icon: Icons.star_rounded,
             color: AppTheme.accentWarm,
           ),

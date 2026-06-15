@@ -150,4 +150,3 @@ This codebase mixes **fully live integrations** with **mock/demo data** — impo
 ---
 
 ## 📄 License
-Not specified — add a `LICENSE` file if you intend to open-source this project.

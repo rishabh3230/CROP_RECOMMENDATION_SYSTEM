@@ -2,13 +2,16 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/models.dart';
 
 class CropPredictionService {
-  // Configurable base URL
-  // Use 'http://10.0.2.2:8000' for Android Emulator local testing
-  // Replace with your Render URL (e.g., 'https://agro-api.onrender.com') when deployed
-  static String baseUrl = 'http://192.168.1.69:8000';
+  // Reads from .env ML_BACKEND_URL.
+  // Fallback: 10.0.2.2:8000 (Android Emulator), or 192.168.1.69:8000 (LAN device).
+  // For production, set ML_BACKEND_URL=https://your-app.onrender.com in .env
+  static String get baseUrl =>
+      dotenv.env['ML_BACKEND_URL'] ?? 'http://10.0.2.2:8000';
+
 
   static Future<Map<String, dynamic>> fetchWeatherAnalysis(double lat, double lon) async {
     final url = Uri.parse('$baseUrl/weather-analysis?lat=$lat&lon=$lon');

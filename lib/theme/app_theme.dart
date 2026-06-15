@@ -24,7 +24,7 @@ class AppTheme {
     return ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: bg,
-      fontFamily: 'Sora',
+      // fontFamily removed — 'Sora' font assets are not bundled; system font is used consistently
       colorScheme: const ColorScheme.dark(
         primary: accent,
         secondary: accentWarm,

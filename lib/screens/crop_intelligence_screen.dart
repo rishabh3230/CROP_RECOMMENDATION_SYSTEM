@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/crop_prediction_service.dart';
 
 class CropIntelligenceScreen extends StatefulWidget {
   final int initialTab;
@@ -24,9 +25,9 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
   String? errorMessage;
   String locationName = "Fetching location...";
 
-  // Constants
-  // backendUrl: replace with your device/server IP when running on a physical phone
-  final String backendUrl = "http://10.0.2.2:8000/predict";
+  // Backend URL is now read centrally from .env via CropPredictionService
+  String get backendUrl => '${CropPredictionService.baseUrl}/predict';
+
 
   @override
   void initState() {

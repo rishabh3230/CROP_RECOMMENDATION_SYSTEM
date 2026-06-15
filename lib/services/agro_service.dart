@@ -1,7 +1,21 @@
 import 'dart:math';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
+
+// Platform-aware backend URL:
+// Android physical device → use PC's LAN IP (must be on same Wi-Fi)
+// Android emulator        → 10.0.2.2 maps to host localhost
+// Linux / Desktop         → 127.0.0.1
+const String _lanIp = '192.168.1.16'; // Your PC's local network IP
+
+String get _backendBase {
+  try {
+    if (Platform.isAndroid) return 'http://$_lanIp:8000';
+  } catch (_) {}
+  return 'http://127.0.0.1:8000';
+}
 
 /// Simulates the ML backend + Weather API service.
 /// In production: replace with real API calls to your Python ML microservice
@@ -104,7 +118,7 @@ class AgroService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/recommend-crops'),
+        Uri.parse('$_backendBase/recommend-crops'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "temperature": temp,

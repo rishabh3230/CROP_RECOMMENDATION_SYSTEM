@@ -40,6 +40,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
     final String? cachedJson = prefs.getString('crop_data_cache');
 
     if (cachedJson != null) {
+      if (!mounted) return;
       setState(() {
         cachedData = jsonDecode(cachedJson);
         isLoading = false;
@@ -52,6 +53,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
       } catch (e) {
         print("Initial location fetch failed: $e");
       }
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });
@@ -67,6 +69,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
         final city = placemark.locality?.isNotEmpty == true
             ? placemark.locality!
             : (placemark.subAdministrativeArea ?? "Unknown City");
+        if (!mounted) return;
         setState(() {
           locationName =
               "$city, ${placemark.country} (${lat.toStringAsFixed(2)}, ${lon.toStringAsFixed(2)})";
@@ -93,6 +96,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
               address['county'] ??
               "Unknown Area";
           final country = address['country'] ?? "";
+          if (!mounted) return;
           setState(() {
             locationName =
                 "$city, $country (${lat.toStringAsFixed(2)}, ${lon.toStringAsFixed(2)})";
@@ -105,6 +109,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
     }
 
     // 3. Ultimate Fallback (must format with parentheses for UI)
+    if (!mounted) return;
     setState(() {
       locationName =
           "Location (${lat.toStringAsFixed(2)}, ${lon.toStringAsFixed(2)})";
@@ -123,9 +128,9 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('crop_data_cache');
     } catch (e) {
-      setState(() => errorMessage = e.toString());
+      if (mounted) setState(() => errorMessage = e.toString());
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -175,11 +180,13 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('crop_data_cache', jsonEncode(newData));
 
+      if (!mounted) return;
       setState(() {
         cachedData = newData;
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -247,10 +254,10 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
         final double avgTemp =
             temps.isEmpty ? 25.5 : temps.reduce((a, b) => a + b) / temps.length;
         final double totalRain =
-            prcp.isEmpty ? 0 : prcp.reduce((a, b) => a + b).toDouble();
+            prcp.isEmpty ? 0.0 : prcp.reduce((a, b) => a + b).toDouble();
         final List<double> last10Rain = prcp
             .skip(prcp.length > 10 ? prcp.length - 10 : 0)
-            .map((v) => v.toDouble())
+            .map((v) => (v as num).toDouble())
             .toList();
 
         return {
@@ -299,22 +306,22 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
       print("Soil fetch error: $e");
     }
 
-    return {"ph": 6.5, "N": 80, "P": 45, "K": 40}; // Fallback
+    return {"ph": 6.5, "N": 80.0, "P": 45.0, "K": 40.0}; // Fallback
   }
 
   Future<List<dynamic>> _fetchPrediction(
-      double n, double p, double k, double temp, double ph, double rain) async {
+      num n, num p, num k, num temp, num ph, num rain) async {
     try {
       final response = await http.post(
         Uri.parse(backendUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "N": n,
-          "P": p,
-          "K": k,
-          "temperature": temp,
-          "ph": ph,
-          "rainfall": rain
+          "N": n.toDouble(),
+          "P": p.toDouble(),
+          "K": k.toDouble(),
+          "temperature": temp.toDouble(),
+          "ph": ph.toDouble(),
+          "rainfall": rain.toDouble()
         }),
       );
       if (response.statusCode == 200) {
@@ -600,6 +607,10 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
           Text("Top Recommended Crops",
               style: GoogleFonts.outfit(
                   fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text("Based on your soil and current weather conditions",
+              style: TextStyle(
+                  fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
           const SizedBox(height: 16),
           ...predictions.map((p) => _buildCropCard(p)),
         ],
@@ -608,7 +619,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
   }
 
   Widget _buildCropCard(dynamic prediction) {
-    final double confidence = prediction['confidence'];
+    final double confidence = (prediction['confidence'] as num).toDouble();
     final String crop = prediction['crop'];
 
     return Container(
@@ -639,9 +650,32 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(crop,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(crop,
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6)),
+                          child: Text(
+                              confidence > 0.8
+                                  ? "High ROI"
+                                  : confidence > 0.5
+                                      ? "Stable Yield"
+                                      : "Secondary Option",
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
                     Text("${(confidence * 100).toStringAsFixed(1)}%",
                         style: const TextStyle(
                             color: Colors.greenAccent,
@@ -704,7 +738,9 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
   }
 
   Widget _buildWeatherStats() {
-    final rain10 = List<double>.from(cachedData!['last_10_days_rainfall']);
+    final rain10 = (cachedData!['last_10_days_rainfall'] as List)
+        .map((v) => (v as num).toDouble())
+        .toList();
     return Column(
       children: [
         Container(
@@ -793,6 +829,8 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
             Icons.science,
             fullWidth: true),
         const SizedBox(height: 24),
+        _buildNPKComparison(),
+        const SizedBox(height: 24),
         Text("Soil Nutrients (NPK)",
             style: GoogleFonts.outfit(
                 fontSize: 18,
@@ -804,20 +842,85 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen> {
             Expanded(
                 child: _buildStatCard(
                     "Nitrogen (N)",
-                    "${cachedData!['N'].toStringAsFixed(0)} mg/kg",
+                    "${(cachedData!['N'] as num).toStringAsFixed(0)} mg/kg",
                     Icons.grass)),
             const SizedBox(width: 12),
             Expanded(
                 child: _buildStatCard(
                     "Phosphorus (P)",
-                    "${cachedData!['P'].toStringAsFixed(0)} mg/kg",
+                    "${(cachedData!['P'] as num).toStringAsFixed(0)} mg/kg",
                     Icons.grain)),
           ],
         ),
         const SizedBox(height: 12),
         _buildStatCard("Potassium (K)",
-            "${cachedData!['K'].toStringAsFixed(0)} mg/kg", Icons.nature,
+            "${(cachedData!['K'] as num).toStringAsFixed(0)} mg/kg", Icons.nature,
             fullWidth: true),
+      ],
+    );
+  }
+
+  Widget _buildNPKComparison() {
+    final n = (cachedData!['N'] as num).toDouble();
+    final p = (cachedData!['P'] as num).toDouble();
+    final k = (cachedData!['K'] as num).toDouble();
+    final total = n + p + k;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Nutrient Balance",
+              style: GoogleFonts.outfit(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 12,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Row(
+                children: [
+                  Expanded(
+                      flex: (n / total * 100).toInt(),
+                      child: Container(color: Colors.greenAccent)),
+                  Expanded(
+                      flex: (p / total * 100).toInt(),
+                      child: Container(color: Colors.orangeAccent)),
+                  Expanded(
+                      flex: (k / total * 100).toInt(),
+                      child: Container(color: Colors.blueAccent)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _nutrientLegend("Nitrogen", Colors.greenAccent),
+              _nutrientLegend("Phosphorus", Colors.orangeAccent),
+              _nutrientLegend("Potassium", Colors.blueAccent),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _nutrientLegend(String label, Color color) {
+    return Row(
+      children: [
+        Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54)),
       ],
     );
   }

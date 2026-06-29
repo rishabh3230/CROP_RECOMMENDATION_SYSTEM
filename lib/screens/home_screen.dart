@@ -50,13 +50,19 @@ class _HomeScreenState extends State<HomeScreen>
     String? localPlace;
     try {
       pos = await locationService.getCurrentLocation();
-      final placemarks =
-          await placemarkFromCoordinates(pos.latitude, pos.longitude);
-      if (placemarks.isNotEmpty) {
-        final p = placemarks.first;
-        localPlace = '${p.locality}, ${p.administrativeArea}';
+      try {
+        final placemarks =
+            await placemarkFromCoordinates(pos.latitude, pos.longitude);
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          localPlace = '${p.locality}, ${p.administrativeArea}';
+        }
+      } catch (e) {
+        debugPrint('Geocoding failed: $e');
+        localPlace = 'Coord: ${pos.latitude.toStringAsFixed(2)}, ${pos.longitude.toStringAsFixed(2)}';
       }
     } catch (e) {
+      debugPrint('Location fetch failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -66,8 +72,8 @@ class _HomeScreenState extends State<HomeScreen>
       }
     }
 
-    final lat = pos?.latitude ?? 30.7;
-    final lon = pos?.longitude ?? 76.7;
+    final lat = pos?.latitude ?? 30.7333; // Default to Chandigarh/Punjab
+    final lon = pos?.longitude ?? 76.7794;
 
     final weatherService = WeatherService();
     WeatherModel? realWeather;
@@ -194,6 +200,19 @@ class _HomeScreenState extends State<HomeScreen>
                 ],
               ),
             ),
+            IconButton(
+              onPressed: () {
+                setState(() => _loading = true);
+                _loadData();
+              },
+              icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent, size: 24),
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.accent.withValues(alpha: 0.1),
+                padding: const EdgeInsets.all(10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(

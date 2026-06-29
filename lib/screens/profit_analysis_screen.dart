@@ -21,7 +21,14 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
   late AnimationController _detailCtrl;
   late Animation<double> _detailAnim;
   String _selectedCategory = 'All';
-  final List<String> _categories = ['All', 'Cereal', 'Vegetable', 'Spice'];
+  final List<String> _categories = [
+    'All',
+    'Cereal',
+    'Vegetable',
+    'Spice',
+    'Oilseed',
+    'Cash Crop'
+  ];
 
   @override
   void initState() {
@@ -43,12 +50,11 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
 
   Future<void> _loadData() async {
     final crops = await AgroService.fetchCropProfits();
-    if (mounted) {
-      setState(() {
-        _allCrops = crops;
-        _loading = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _allCrops = crops;
+      _loading = false;
+    });
   }
 
   List<CropProfit> get _filteredCrops {
@@ -319,7 +325,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -430,19 +436,19 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   Expanded(
                       child: _profitStat(
                           'Profit/Ha',
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}',
                           AppTheme.accentWarm)),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _profitStat(
                           'Market Price',
-                          '\$${crop.marketPrice.toStringAsFixed(0)}/t',
+                          '₹${crop.marketPrice.toStringAsFixed(0)}/t',
                           AppTheme.accentCool)),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _profitStat(
                           'Production',
-                          '\$${crop.productionCost.toStringAsFixed(0)}',
+                          '₹${crop.productionCost.toStringAsFixed(0)}',
                           AppTheme.accentRed)),
                 ],
               ),
@@ -577,7 +583,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '\$${crop.profitPerHectare.toStringAsFixed(0)}/ha',
+                          '₹${crop.profitPerHectare.toStringAsFixed(0)}/ha',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
@@ -585,7 +591,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                           ),
                         ),
                         Text(
-                          '+\$${(crop.profitPerHectare - _selectedCrop!.profitPerHectare).toStringAsFixed(0)} more',
+                          '+₹${(crop.profitPerHectare - _selectedCrop!.profitPerHectare).toStringAsFixed(0)} more',
                           style: const TextStyle(
                               fontSize: 10, color: AppTheme.accent),
                         ),
